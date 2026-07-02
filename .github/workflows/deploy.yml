@@ -1,0 +1,40 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Compile TypeScript
+        run: |
+          npx tsc --project tsconfig.json || true
+
+      - name: Prepare publish directory
+        run: |
+          # ensure output folder exists; adjust if your build outputs elsewhere
+          mkdir -p dist
+          # if index.ts compiles to dist/index.js, keep it; otherwise copy index.ts as a fallback
+          if [ -f build/index.js ]; then cp -R build/* dist/; fi
+          if [ -f index.ts ] && [ ! -f dist/index.js ]; then cp index.ts dist/index.ts; fi
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist

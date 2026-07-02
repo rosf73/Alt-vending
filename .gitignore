@@ -1,0 +1,6 @@
+node_modules/
+dist/
+vending.db
+vending.db-*
+*.log
+.DS_Store
