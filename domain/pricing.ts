@@ -11,7 +11,7 @@ export const PROMO_EVERY = 3;
 
 /** 상품 기본가 허용 범위 (§3.2, BR-B6, 경계 포함) */
 export const MIN_BASE_PRICE = 100;
-export const MAX_BASE_PRICE = 10_000;
+export const MAX_BASE_PRICE = 99_999;
 /** 최대 상품 개수 (§3.2, BR-B10 — 3×3 그리드) */
 export const MAX_PRODUCTS = 9;
 

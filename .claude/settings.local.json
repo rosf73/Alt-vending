@@ -11,7 +11,14 @@
       "Bash(curl -s http://localhost:5173/api/state)",
       "Bash(curl -s http://localhost:5173/)",
       "Bash(rm -f vending.db vending.db-* 2>/dev/null; echo \"db reset\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('balance',d['balance'],'state',d['state']\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('balance',d['balance'],'state',d['state']\\)\")",
+      "Bash(xargs kill -9)",
+      "Bash(curl -s -XPOST localhost:5173/api/admin/products/cola/qty -H 'Content-Type: application/json' -d '{\"qty\":3}')",
+      "Bash(curl -s -XPOST localhost:5173/api/admin/products/water/price -H 'Content-Type: application/json' -d '{\"price\":700}')",
+      "Bash(curl -s -XPOST localhost:5173/api/admin/coins/100 -H 'Content-Type: application/json' -d '{\"count\":30}')",
+      "Bash(curl -s -XPOST localhost:5173/api/admin/products/cola/price -H 'Content-Type: application/json' -d '{\"price\":50}')",
+      "Bash(curl -s 'localhost:5173/api/audit?limit=10')",
+      "Bash(python3 -m json.tool)"
     ]
   }
 }

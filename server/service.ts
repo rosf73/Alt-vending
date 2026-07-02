@@ -5,6 +5,8 @@ import type { Denomination, Machine, Product } from '../domain/types.js';
 import { beginDispense, insert, refund, resolveDispense, type OpError } from '../domain/session.js';
 import { addProduct, removeProduct, setBasePrice, setCoinCount, setQty, type AdminError } from '../domain/admin.js';
 import { projectMachine, type MachineView } from '../domain/projection.js';
+import { findProduct } from '../domain/machine.js';
+import type { AuditEntry, NewAuditEntry } from '../domain/audit.js';
 import type { VendingStore } from '../persistence/store.js';
 
 export interface ServiceOptions {
@@ -70,7 +72,15 @@ export class VendingService {
   }
 
   refund(): ReturnType<typeof refund> {
+    const amount = this.machine.balance;
     const r = refund(this.machine);
+    this.audit({
+      type: 'MANUAL_REFUND',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: r.ok ? `잔여 잔액 ${amount.toLocaleString()}원 반환` : `반환 실패 (거스름돈 부족, 잔액 ${amount.toLocaleString()}원 유지)`,
+      before: JSON.stringify({ balance: amount }),
+      after: JSON.stringify({ balance: this.machine.balance, breakdown: r.ok ? r.breakdown : null }),
+    });
     if (r.ok) {
       this.clearAutoReturn();
       this.commit();
@@ -82,8 +92,21 @@ export class VendingService {
     if (this.dispenseTimer) clearTimeout(this.dispenseTimer);
     this.dispenseTimer = setTimeout(() => {
       this.dispenseTimer = null;
+      const pending = this.machine.pendingDispense;
+      const product = pending ? findProduct(this.machine, pending.productId) : undefined;
+      const name = product?.name ?? pending?.productId ?? '?';
+      const price = pending?.effectivePrice ?? 0;
       const success = this.rng();
       resolveDispense(this.machine, success);
+      this.audit({
+        type: success ? 'SALE_SUCCESS' : 'SALE_FAIL',
+        result: success ? 'OK' : 'FAIL',
+        detail: success
+          ? `${name} 배출 성공 (${price.toLocaleString()}원, 매출 반영)`
+          : `${name} 배출 실패 (${price.toLocaleString()}원 미반환, 재고 -1)`,
+        before: null,
+        after: JSON.stringify({ productId: pending?.productId, price, success }),
+      });
       if (this.machine.state === 'ACTIVE') this.scheduleAutoReturn(); // 잔액 남으면 타이머 재개
       this.commit();
     }, this.dispenseDelayMs());
@@ -95,8 +118,16 @@ export class VendingService {
     this.autoReturnTimer = setTimeout(() => {
       this.autoReturnTimer = null;
       if (this.machine.state === 'ACTIVE') {
-        refund(this.machine); // REQ-A8 자동 반환
-        this.commit();
+        const amount = this.machine.balance;
+        const r = refund(this.machine); // REQ-A8 자동 반환
+        this.audit({
+          type: 'AUTO_REFUND',
+          result: r.ok ? 'OK' : 'FAIL',
+          detail: r.ok ? `미구매 10초 경과 — ${amount.toLocaleString()}원 자동 반환` : `자동 반환 실패 (거스름돈 부족)`,
+          before: JSON.stringify({ balance: amount }),
+          after: JSON.stringify({ balance: this.machine.balance }),
+        });
+        if (r.ok) this.commit();
       }
     }, this.autoReturnMs);
   }
@@ -108,29 +139,92 @@ export class VendingService {
     }
   }
 
-  // ── 관리자 연산 (변경 시 실시간 반영 BR-B7/B11) ──
+  // ── 관리자 연산 (변경 시 실시간 반영 BR-B7/B11, 감사 로그 적재 BR-B9) ──
 
   setQty(id: string, qty: number): AdminResultLike {
-    return this.adminCommit(setQty(this.machine, id, qty));
+    const p = findProduct(this.machine, id);
+    const before = p?.qty;
+    const r = setQty(this.machine, id, qty);
+    this.audit({
+      type: 'STOCK_CHANGE',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: `${p?.name ?? id} 재고 ${before ?? '-'} → ${qty}`,
+      before: JSON.stringify({ qty: before }),
+      after: JSON.stringify({ qty }),
+    });
+    return this.adminCommit(r);
   }
   setPrice(id: string, price: number): AdminResultLike {
-    return this.adminCommit(setBasePrice(this.machine, id, price));
+    const p = findProduct(this.machine, id);
+    const before = p?.basePrice;
+    const r = setBasePrice(this.machine, id, price);
+    this.audit({
+      type: 'PRICE_CHANGE',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: `${p?.name ?? id} 기본가 ${before ?? '-'} → ${price}`,
+      before: JSON.stringify({ basePrice: before }),
+      after: JSON.stringify({ basePrice: price }),
+    });
+    return this.adminCommit(r);
   }
   addProduct(p: Product): AdminResultLike {
-    return this.adminCommit(addProduct(this.machine, p));
+    const r = addProduct(this.machine, p);
+    this.audit({
+      type: 'PRODUCT_ADD',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: `${p.name} 추가 (기본가 ${p.basePrice}, 수량 ${p.qty})`,
+      before: null,
+      after: JSON.stringify({ id: p.id, name: p.name, basePrice: p.basePrice, qty: p.qty }),
+    });
+    return this.adminCommit(r);
   }
   removeProduct(id: string): AdminResultLike {
-    return this.adminCommit(removeProduct(this.machine, id));
+    const p = findProduct(this.machine, id);
+    const r = removeProduct(this.machine, id);
+    this.audit({
+      type: 'PRODUCT_REMOVE',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: `${p?.name ?? id} 제거`,
+      before: JSON.stringify(p ? { id: p.id, name: p.name, basePrice: p.basePrice, qty: p.qty } : null),
+      after: null,
+    });
+    return this.adminCommit(r);
   }
   setCoin(denom: Denomination, count: number): AdminResultLike {
-    return this.adminCommit(setCoinCount(this.machine, denom, count));
+    const before = this.machine.coins[denom];
+    const r = setCoinCount(this.machine, denom, count);
+    this.audit({
+      type: 'COIN_CHANGE',
+      result: r.ok ? 'OK' : 'FAIL',
+      detail: `${denom.toLocaleString()}원 잔돈 ${before} → ${count}개`,
+      before: JSON.stringify({ count: before }),
+      after: JSON.stringify({ count }),
+    });
+    return this.adminCommit(r);
+  }
+
+  /** 모드 전환 기록 (B-3.4). 상태 변경 없음 — 감사 로그만 적재. */
+  logModeSwitch(from: string, to: string): void {
+    this.audit({
+      type: 'MODE_SWITCH',
+      result: 'OK',
+      detail: `${from} → ${to}`,
+      before: JSON.stringify({ mode: from }),
+      after: JSON.stringify({ mode: to }),
+    });
   }
 
   reset(): void {
     this.clearAutoReturn();
     if (this.dispenseTimer) clearTimeout(this.dispenseTimer);
-    this.machine = this.store.reset();
+    this.machine = this.store.reset(); // 상태 + 감사 로그 초기화
+    this.audit({ type: 'REVENUE_RESET', result: 'OK', detail: '전체 초기화 (매출·재고·잔돈·세션·로그 리셋)', before: null, after: null });
     this.commit();
+  }
+
+  /** 감사 로그 조회 (REQ-B11). */
+  listAudit(limit?: number): AuditEntry[] {
+    return this.store.listAudit(limit);
   }
 
   private adminCommit(r: { ok: true } | { ok: false; error: AdminError }): AdminResultLike {
@@ -139,6 +233,11 @@ export class VendingService {
       this.commit();
     }
     return r;
+  }
+
+  /** 감사 로그 1건 적재 (백엔드 영속, B-3.4). */
+  private audit(entry: NewAuditEntry): void {
+    this.store.appendAudit(entry);
   }
 
   /** 영속 저장 + 모든 구독자에 실시간 push (INV-1 + INV-7). */

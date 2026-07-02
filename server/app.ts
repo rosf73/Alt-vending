@@ -94,5 +94,17 @@ export function createApp(service: VendingService): Express {
     res.json({ ok: true, state: service.view() });
   });
 
+  // ── 감사 로그 (REQ-B11) ──
+  app.get('/api/audit', (req, res) => {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 200));
+    res.json({ ok: true, entries: service.listAudit(limit) });
+  });
+
+  // 모드 전환 기록 (B-3.4) — 상태 변경 없이 로그만 적재
+  app.post('/api/audit/mode-switch', (req, res) => {
+    service.logModeSwitch(String(req.body?.from ?? ''), String(req.body?.to ?? ''));
+    res.json({ ok: true });
+  });
+
   return app;
 }

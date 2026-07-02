@@ -2,6 +2,7 @@
 // 인라인 편집 + 저장 (design-system §5.5). 변경은 실시간으로 판매 탭에 반영(INV-7).
 import * as api from './client.js';
 import type { MachineView } from './client.js';
+import { AUDIT_LABELS, type AuditEventType } from './domain/audit.js';
 import { clear, errorMessage, h, toast, won } from './ui.js';
 
 type Tab = 'stock' | 'coins' | 'sales' | 'log';
@@ -20,7 +21,7 @@ export function renderAdmin(root: HTMLElement): () => void {
     { key: 'stock', label: '재고 관리' },
     { key: 'coins', label: '잔돈 관리' },
     { key: 'sales', label: '매출' },
-    { key: 'log', label: '로그*', disabled: true },
+    { key: 'log', label: '감사 로그' },
   ];
 
   function renderTabs() {
@@ -131,9 +132,33 @@ export function renderAdmin(root: HTMLElement): () => void {
     );
   }
 
-  // ── 감사 로그 (예정, REQ-B11) ──
+  // ── 감사 로그 (REQ-B11) — 백엔드 적재 이벤트 조회 ──
   function renderLog() {
-    panel.append(h('div', { class: 'planned', text: '🚧 감사 로그 — 준비 중' }));
+    const table = h('table', { class: 'auditlog' });
+    table.append(h('thead', {}, [rowTh(['시각', '유형', '상세', '결과'])]));
+    const tbody = h('tbody');
+    table.append(tbody);
+    const empty = h('div', { class: 'planned', text: '기록된 이벤트가 없습니다' });
+    panel.append(table, empty);
+
+    api.fetchAudit(200).then((entries) => {
+      if (tab !== 'log') return; // 그 사이 탭이 바뀌었으면 무시
+      empty.style.display = entries.length ? 'none' : '';
+      clear(tbody);
+      for (const e of entries) {
+        const time = new Date(e.at).toLocaleTimeString('ko-KR', { hour12: false });
+        const label = AUDIT_LABELS[e.type as AuditEventType] ?? e.type;
+        const resultCell = h('td', { class: e.result === 'OK' ? 'ok' : 'fail', text: e.result === 'OK' ? '성공' : '실패' });
+        tbody.append(
+          h('tr', {}, [
+            h('td', { class: 'at', text: time }),
+            h('td', {}, [h('span', { class: `logtype ${e.type}`, text: label })]),
+            h('td', { class: 'detail', text: e.detail }),
+            resultCell,
+          ]),
+        );
+      }
+    });
   }
 
   const unsub = api.onState((v) => render(v));

@@ -15,12 +15,20 @@ function currentRoute(): Route {
 }
 
 let cleanup: (() => void) | null = null;
+let activeRoute: Route | null = null;
 
 function mount() {
   cleanup?.();
   app.replaceChildren();
 
   const route = currentRoute();
+
+  // 모드 전환 감사 로그 (B-3.4). 최초 진입은 제외, 실제 전환만 기록.
+  if (activeRoute && activeRoute !== route) {
+    const label = (r: Route) => (r === 'admin' ? '관리자 모드' : '판매 모드');
+    void api.logModeSwitch(label(activeRoute), label(route));
+  }
+  activeRoute = route;
 
   // 상단 모드 토글 바 (screen-layouts §3·4)
   const salesBtn = h('button', { class: route === 'sales' ? 'active' : '', text: '판매' });

@@ -90,7 +90,7 @@ describe('관리자 API', () => {
 
   it('TC-B06: 범위 밖 가격 거부', async () => {
     expect((await request(app).post('/api/admin/products/cola/price').send({ price: 50 })).status).toBe(400);
-    expect((await request(app).post('/api/admin/products/cola/price').send({ price: 10500 })).status).toBe(400);
+    expect((await request(app).post('/api/admin/products/cola/price').send({ price: 100000 })).status).toBe(400);
   });
 
   it('TC-B18: 9개 초과 상품 추가 거부', async () => {
