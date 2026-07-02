@@ -37,15 +37,15 @@ describe('가격 변경 (BR-B6)', () => {
     expect(findProduct(m, 'cola')!.basePrice).toBe(1600);
   });
 
-  it('TC-B06: 범위 밖(50, 10500) 거부, 값 불변', () => {
+  it('TC-B06: 범위 밖(50, 100,000) 거부, 값 불변', () => {
     expect(setBasePrice(m, 'cola', 50).ok).toBe(false);
-    expect(setBasePrice(m, 'cola', 10500).ok).toBe(false);
+    expect(setBasePrice(m, 'cola', 100000).ok).toBe(false);
     expect(findProduct(m, 'cola')!.basePrice).toBe(1500);
   });
 
-  it('TC-B17: 경계값 100·10,000 허용', () => {
+  it('TC-B17: 경계값 100·99,999 허용', () => {
     expect(setBasePrice(m, 'cola', 100).ok).toBe(true);
-    expect(setBasePrice(m, 'cola', 10000).ok).toBe(true);
+    expect(setBasePrice(m, 'cola', 99999).ok).toBe(true);
   });
 });
 

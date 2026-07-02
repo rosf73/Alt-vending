@@ -51,7 +51,7 @@ export function renderAdmin(root: HTMLElement): () => void {
     );
     const tbody = h('tbody');
     for (const p of v.products) {
-      const price = h('input', { type: 'number', value: String(p.basePrice), min: '100', max: '10000' }) as HTMLInputElement;
+      const price = h('input', { type: 'number', value: String(p.basePrice), min: '100', max: '99999' }) as HTMLInputElement;
       const qty = h('input', { type: 'number', value: String(p.qty), min: '0' }) as HTMLInputElement;
       const save = h('button', { class: 'btn', text: '저장' });
       save.addEventListener('click', async () => {
@@ -76,7 +76,7 @@ export function renderAdmin(root: HTMLElement): () => void {
     // + 상품 추가 (최대 9개, BR-B10)
     const atMax = v.products.length >= 9;
     const nameIn = h('input', { class: 'name', placeholder: '상품명' }) as HTMLInputElement;
-    const priceIn = h('input', { type: 'number', placeholder: '기본가', min: '100', max: '10000', value: '1000' }) as HTMLInputElement;
+    const priceIn = h('input', { type: 'number', placeholder: '기본가', min: '100', max: '99999', value: '1000' }) as HTMLInputElement;
     const qtyIn = h('input', { type: 'number', placeholder: '수량', min: '0', value: '5' }) as HTMLInputElement;
     const addBtn = h('button', { class: 'btn', text: '+ 상품 추가' }) as HTMLButtonElement;
     addBtn.disabled = atMax;

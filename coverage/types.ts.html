@@ -245,7 +245,7 @@ export type SessionState = 'IDLE' | 'ACTIVE' | 'DISPENSING' | 'RETURNING';
 export interface Product {
   id: string;
   name: string;
-  /** 기본가 — 관리자가 관리 (100~10,000, BR-B6) */
+  /** 기본가 — 관리자가 관리 (100~99,999, BR-B6) */
   basePrice: number;
   /** 재고 수량 (INV-6: 0 미만 불가) */
   qty: number;

@@ -5,9 +5,9 @@ import type { MachineView, ProductView } from './client.js';
 import { clear, errorMessage, h, toast, won } from './ui.js';
 
 const DENOMS = [
-  { denom: 100, src: '/resources/100.png' },
-  { denom: 500, src: '/resources/500.png' },
-  { denom: 1000, src: '/resources/1000.jpeg' }, // ⚠️ jpeg (design-system §8)
+  { denom: 100, src: '/resources/100.png', type: 'coin' },
+  { denom: 500, src: '/resources/500.png', type: 'coin' },
+  { denom: 1000, src: '/resources/1000.jpeg', type: 'bill' }, // ⚠️ jpeg (design-system §8)
 ];
 const AUTO_RETURN_SEC = 10; // §3.3
 
@@ -19,7 +19,7 @@ export function renderSales(root: HTMLElement): () => void {
   const grid = h('div', { class: 'overlay grid' });
   const balance = h('div', { class: 'overlay balance', 'aria-live': 'polite', text: '₩0' });
   const drop = h('div', { class: 'overlay drop', text: '💰 여기에 돈을 넣으세요' });
-  const refundBtn = h('button', { class: 'overlay refund', text: '반환' }) as HTMLButtonElement;
+  const refundBtn = h('button', { class: 'overlay refund', text: '잔액 반환' }) as HTMLButtonElement;
   const dispense = h('div', { class: 'overlay dispense', text: '' });
   const statusline = h('div', { class: 'statusline', 'aria-live': 'assertive' });
   const device = h('div', { class: 'device' }, [grid, balance, drop, refundBtn, dispense, statusline]);
@@ -27,16 +27,30 @@ export function renderSales(root: HTMLElement): () => void {
 
   // ④ 화폐 트레이 (무한 소스 드래그 칩)
   const tray = h('div', { class: 'tray' });
-  for (const { denom, src } of DENOMS) {
+  for (const { denom, src, type } of DENOMS) {
     const img = h('img', { src, alt: `${denom}원`, draggable: 'false' });
-    const chip = h('div', {
-      class: 'chip',
-      draggable: 'true',
-      role: 'button',
-      tabindex: '0',
-      title: `${denom.toLocaleString()}원 투입`,
-      'aria-label': `${denom}원 투입`,
-    }, [img]);
+    let chip;
+    if (type == 'coin') {
+      chip = h('div', {
+        class: 'chip',
+        id: 'coin',
+        draggable: 'true',
+        role: 'button',
+        tabindex: '0',
+        title: `${denom.toLocaleString()}원 투입`,
+        'aria-label': `${denom}원 투입`,
+      }, [img]);
+    } else {
+      chip = h('div', {
+        class: 'chip',
+        id: 'bill',
+        draggable: 'true',
+        role: 'button',
+        tabindex: '0',
+        title: `${denom.toLocaleString()}원 투입`,
+        'aria-label': `${denom}원 투입`,
+      }, [img]);
+    }
     chip.addEventListener('dragstart', (e) => {
       e.dataTransfer?.setData('text/denom', String(denom));
       chip.classList.add('dragging');

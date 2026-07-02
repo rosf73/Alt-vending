@@ -43,7 +43,7 @@ export function errorMessage(code: string): string {
     SOLD_OUT: '품절된 상품입니다',
     INSUFFICIENT_CHANGE: '거스름돈이 부족합니다 — 잠시 후 다시 시도하세요',
     BUSY: '처리 중입니다. 잠시만 기다려 주세요',
-    PRICE_OUT_OF_RANGE: '기본가는 100~10,000원만 가능합니다',
+    PRICE_OUT_OF_RANGE: '기본가는 100~99,999원만 가능합니다',
     NEGATIVE_QTY: '수량은 0 미만이 될 수 없습니다',
     NEGATIVE_COIN: '잔돈 개수는 0 미만이 될 수 없습니다',
     MAX_PRODUCTS: '상품은 최대 9개까지 가능합니다',

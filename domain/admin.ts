@@ -24,7 +24,7 @@ export function setQty(machine: Machine, productId: string, qty: number): AdminR
   return { ok: true };
 }
 
-/** 기본가 변경. 100~10,000 범위(경계 포함, BR-B6). */
+/** 기본가 변경. 100~99,999 범위(경계 포함, BR-B6). */
 export function setBasePrice(machine: Machine, productId: string, price: number): AdminResult {
   const product = findProduct(machine, productId);
   if (!product) return { ok: false, error: 'NOT_FOUND' };
@@ -58,7 +58,7 @@ export function setCoinCount(machine: Machine, denom: Denomination, count: numbe
   return { ok: true };
 }
 
-/** 기본가 유효성 (§3.2, BR-B6, 경계 100·10,000 허용). */
+/** 기본가 유효성 (§3.2, BR-B6, 경계 100·99,999 허용). */
 export function isValidPrice(price: number): boolean {
   return Number.isInteger(price) && price >= MIN_BASE_PRICE && price <= MAX_BASE_PRICE;
 }
