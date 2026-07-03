@@ -353,7 +353,6 @@ body {
 .chip {
   cursor: grab;
   overflow: hidden;
-  background: #fff;
   transition: transform 0.1s;
   height: 54px;
   display: flex;
@@ -394,6 +393,208 @@ body {
   border-radius: 4px;
   z-index: 50;
   box-shadow: inset 0 -8px 10px rgba(0, 0, 0, 0.4), 0 8px 12px rgba(0, 0, 0, 0.5);
+}
+
+/* ══════════════ 판매 화면 3D (Three.js) ══════════════ */
+.sales3d {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+.canvas-wrap canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  touch-action: none;
+}
+.canvas-wrap.drop-over {
+  box-shadow: inset 0 0 0 3px var(--color-primary), inset 0 0 40px rgba(47, 128, 237, 0.4);
+}
+/* CSS2D 라벨 오버레이 — 클릭은 3D 레이캐스트가 처리하므로 통과 */
+.css2d-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.css2d-layer > * {
+  position: absolute;
+}
+
+/* 상품 라벨 (선반 아래) */
+.prod3d {
+  transform: translate(-50%, 0);
+  text-align: center;
+  min-width: 60px;
+  background: rgba(12, 13, 16, 0.72);
+  border: 1px solid #3a3f47;
+  border-radius: 6px;
+  padding: 2px 5px;
+  backdrop-filter: blur(2px);
+}
+.prod3d.buyable {
+  border-color: var(--color-success);
+  box-shadow: 0 0 8px rgba(39, 174, 96, 0.5);
+}
+.prod3d.sold {
+  opacity: 0.6;
+}
+.prod3d .nm {
+  font: var(--font-caption);
+  font-weight: 700;
+  font-size: 11px;
+}
+.prod3d .q {
+  font-size: 9px;
+  color: var(--color-text-muted);
+}
+.prod3d .p {
+  font: var(--font-price);
+  font-size: 12px;
+}
+.prod3d .p.normal {
+  color: var(--color-price);
+}
+.prod3d .p.raised {
+  color: var(--color-price-raised);
+}
+.prod3d .p.sold {
+  color: var(--color-text-muted);
+}
+.prod3d .orig {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+  font-size: 9px;
+  margin-right: 3px;
+}
+
+/* LED 잔액 (3D) */
+.balance3d {
+  transform: translate(-50%, -50%);
+  font: var(--font-display);
+  font-size: 22px;
+  color: var(--color-display-fg);
+  text-shadow: 0 0 8px rgba(124, 252, 124, 0.8);
+  white-space: nowrap;
+}
+.status3d {
+  transform: translate(-50%, -50%);
+  font: var(--font-caption);
+  color: var(--color-text);
+  white-space: nowrap;
+  text-align: center;
+}
+.status3d b {
+  color: var(--color-warning);
+}
+.label3d {
+  transform: translate(-50%, -50%);
+  font: var(--font-caption);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+}
+.refund-label {
+  color: var(--color-danger);
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}
+
+/* ══════════════ 관리자 진입 게이트 (B-4) ══════════════ */
+.gate {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.gate-card {
+  width: 100%;
+  max-width: 320px;
+  background: var(--color-surface);
+  border: 1px solid #3a3f47;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+.gate-title {
+  font: var(--font-h1);
+  font-size: 20px;
+}
+.gate-sub {
+  font: var(--font-caption);
+  color: var(--color-text-muted);
+}
+.gate-input {
+  width: 100%;
+  padding: 12px 14px;
+  font: var(--font-display);
+  font-size: 22px;
+  text-align: center;
+  letter-spacing: 6px;
+  background: #1a1d22;
+  border: 1px solid #3a3f47;
+  border-radius: var(--radius-btn);
+  color: var(--color-text);
+}
+.gate-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(47, 128, 237, 0.4);
+}
+.gate-err {
+  color: var(--color-danger);
+  font: var(--font-caption);
+  min-height: 14px;
+}
+.gate-btn {
+  padding: 12px;
+  font-size: 15px;
+}
+
+/* ══════════════ 관리자 화면 3D 스타일 ══════════════ */
+.admin3d {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.admin-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.admin-bg canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.admin-fg {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow-y: auto;
+}
+/* 글래스모픽 패널 (3D 배경 위) */
+.admin-fg .panel {
+  background: rgba(42, 46, 53, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.admin-fg .tabs button {
+  backdrop-filter: blur(6px);
+  background: rgba(34, 38, 44, 0.7);
 }
 
 /* ══════════════ 관리자 화면 ══════════════ */
