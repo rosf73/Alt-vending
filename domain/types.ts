@@ -34,7 +34,7 @@ export interface Product {
  */
 export interface Machine {
   products: Product[];
-  /** 반환용 잔돈 reserve (투입 현금과 독립 — TC-B10/A15 거스름돈 부족 재현) */
+  /** 반환용 잔돈 reserve. 투입 화폐가 편입되며(A6-8), 관리자 보충/회수로도 조정 (B-3.2) */
   coins: CoinFloat;
   /** 누적 매출 (배출 성공 시에만 증가, B-3.3) */
   revenue: number;

@@ -21,6 +21,8 @@ export type OpError =
 /**
  * 현금 투입 (A-3.2, INV-3). 허용 외 화폐는 거부하고 상태 불변 (BR-A1).
  * 성공 시 잔액 증가·상태 ACTIVE. 배출/반환 중(transient)에는 투입 거부(BUSY).
+ * 투입한 화폐는 자판기 잔돈 보유량(float)에 편입되어 관리자 잔돈·거스름돈 가용성에 반영된다
+ * (A6-8 결정: 실제 자판기처럼 투입 화폐가 반환 재원이 됨).
  * 자동 반환 타이머 리셋(BR-A7)은 서버/프론트 타이머 계층 책임.
  */
 export function insert(
@@ -35,6 +37,7 @@ export function insert(
   }
   machine.balance += denom;
   machine.totalInserted += denom;
+  machine.coins[denom as Denomination] += 1; // 투입 화폐가 잔돈 보유량에 편입 (관리자 잔돈 반영)
   machine.state = 'ACTIVE';
   return { ok: true, balance: machine.balance };
 }

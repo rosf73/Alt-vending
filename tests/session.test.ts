@@ -173,22 +173,28 @@ describe('반환 (A-3.4/A-3.5)', () => {
     expect(m.state).toBe('IDLE');
   });
 
-  it('TC-A15/BR-A4/A6-7: 100원 재고 0으로 700 정확 반환 불가 → 거부, 잔액·세션 유지', () => {
-    m.coins = { 1000: 5, 500: 5, 100: 0 };
-    insert(m, 500);
-    insert(m, 100);
-    insert(m, 100); // 700
-    const r = refund(m);
+  it('TC-A15/BR-A4/A6-7: 거스름돈 부족 → 반환 거부, 잔액·세션 유지', () => {
+    // 잔돈 없음 → 1,000 투입(coins[1000]=1) → 생수 500 구매 → 잔액 500 반환 필요하나 500/100 부족
+    m.coins = { 1000: 0, 500: 0, 100: 0 };
+    insert(m, 1000);
+    buy(m, 'water', true); // 500 결제, 잔액 500
+    const r = refund(m); // 500 반환 불가(500/100 float 0, 1000만 보유)
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe('INSUFFICIENT_CHANGE');
-    expect(m.balance).toBe(700); // 유지
+    expect(m.balance).toBe(500); // 유지
     expect(m.state).toBe('ACTIVE');
   });
 
-  it('반환분만큼 자판기 잔돈 float 차감 (INV-6)', () => {
+  it('A6-8: 투입 화폐가 잔돈 float에 편입된다', () => {
+    const before = m.coins[500];
     insert(m, 500);
+    expect(m.coins[500]).toBe(before + 1); // 투입 시 잔돈 +1
+  });
+
+  it('반환분만큼 자판기 잔돈 float 차감 (INV-6)', () => {
+    insert(m, 500); // 편입으로 coins[500] +1
     const coinsBefore = m.coins[500];
-    refund(m);
+    refund(m); // 반환으로 500 1개 차감
     expect(m.coins[500]).toBe(coinsBefore - 1);
   });
 });

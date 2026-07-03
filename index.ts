@@ -2,8 +2,9 @@
 // 단일 탭 내 모드 토글 + SSE 부트스트랩. 판매/관리자는 다른 탭 동시 오픈도 가능(INV-7).
 import './styles.css';
 import * as api from './client.js';
-import { renderSales } from './salesView.js';
-import { renderAdmin } from './adminView.js';
+import { renderSales3D } from './sales3d.js';
+import { renderAdmin3D } from './admin3d.js';
+import { isAdminAuthed, renderAdminGate } from './adminGate.js';
 import { h } from './ui.js';
 
 type Route = 'sales' | 'admin';
@@ -22,13 +23,8 @@ function mount() {
   app.replaceChildren();
 
   const route = currentRoute();
-
-  // 모드 전환 감사 로그 (B-3.4). 최초 진입은 제외, 실제 전환만 기록.
-  if (activeRoute && activeRoute !== route) {
-    const label = (r: Route) => (r === 'admin' ? '관리자 모드' : '판매 모드');
-    void api.logModeSwitch(label(activeRoute), label(route));
-  }
-  activeRoute = route;
+  // 관리자 진입 시 인증 필요 (B-4 게이트). 미인증이면 게이트 화면을 띄운다.
+  const needsGate = route === 'admin' && !isAdminAuthed();
 
   // 상단 모드 토글 바 (screen-layouts §3·4)
   const salesBtn = h('button', { class: route === 'sales' ? 'active' : '', text: '판매' });
@@ -43,7 +39,20 @@ function mount() {
   const content = h('div', { style: 'flex:1;min-height:0;display:flex;flex-direction:column;' });
   app.append(topbar, content);
 
-  cleanup = route === 'admin' ? renderAdmin(content) : renderSales(content);
+  if (needsGate) {
+    // 인증 전에는 모드 전환 로그를 남기지 않는다(실제 진입이 아님).
+    cleanup = renderAdminGate(content, () => mount());
+    return;
+  }
+
+  // 모드 전환 감사 로그 (B-3.4). 실제 진입한 모드 기준으로만 기록.
+  if (activeRoute && activeRoute !== route) {
+    const label = (r: Route) => (r === 'admin' ? '관리자 모드' : '판매 모드');
+    void api.logModeSwitch(label(activeRoute), label(route));
+  }
+  activeRoute = route;
+
+  cleanup = route === 'admin' ? renderAdmin3D(content) : renderSales3D(content);
 }
 
 window.addEventListener('hashchange', mount);
