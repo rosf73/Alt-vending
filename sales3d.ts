@@ -7,12 +7,14 @@ import * as api from './client.js';
 import type { MachineView, ProductView } from './client.js';
 import { errorMessage, h, toast, won } from './ui.js';
 
+// 동전(coin): 원통 윗면/아랫면에 텍스처. 지폐(bill): 얇은 직사각 큐브 윗면/아랫면에 텍스처.
 const DENOMS = [
-  { denom: 100, src: '/resources/100.png' },
-  { denom: 500, src: '/resources/500.png' },
-  { denom: 1000, src: '/resources/1000.jpeg' },
+  { denom: 100, src: '/resources/100.png', type: 'coin' as const },
+  { denom: 500, src: '/resources/500.png', type: 'coin' as const },
+  { denom: 1000, src: '/resources/1000.jpeg', type: 'bill' as const },
 ];
 const AUTO_RETURN_SEC = 10;
+const SLOT_WORLD = new THREE.Vector3(1.12, 0.95, 0.9); // 투입구 월드 좌표
 
 // 3×3 그리드 좌표 (선반) — 열 x, 행 y
 const COLS = [-1.15, -0.5, 0.15];
@@ -29,6 +31,13 @@ interface Slot {
   id: string | null;
 }
 
+interface Money {
+  mesh: THREE.Mesh;
+  denom: number;
+  home: THREE.Vector3;
+  baseRot: THREE.Euler;
+}
+
 // 간단 트윈 (프레임 delta 기반) — 배출 낙하/코인 애니메이션용
 interface Tween {
   t: number;
@@ -41,16 +50,15 @@ export function renderSales3D(root: HTMLElement): () => void {
   root.replaceChildren();
   const screen = h('div', { class: 'sales3d' });
   const canvasWrap = h('div', { class: 'canvas-wrap' });
-  const tray = h('div', { class: 'tray' });
-  screen.append(canvasWrap, tray);
+  screen.append(canvasWrap);
   root.append(screen);
 
   // ── Three.js 기본 셋업 ──
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0c0d10);
-  scene.fog = new THREE.Fog(0x0c0d10, 10, 20);
+  scene.fog = new THREE.Fog(0x0c0d10, 26, 60); // 벽/바닥이 보이도록 원거리 fog
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
   // 시작 구도: 정면이 아니라 좌상단 상공에서 자판기를 내려다보는 구도 (spec §8.3.2)
   camera.position.set(-4.2, 5.6, 4.8);
 
@@ -181,10 +189,19 @@ export function renderSales3D(root: HTMLElement): () => void {
   trayGlow.position.copy(TRAY_POS);
   machine.add(trayGlow);
 
-  // 바닥 그림자 받이
+  // 뒤편 벽 (brick 색상) — 자판기 뒤에 배치
+  const wall = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 40),
+    new THREE.MeshStandardMaterial({ color: 0x8f4a3a, roughness: 0.95, metalness: 0 }),
+  );
+  wall.position.set(0, 6, -5);
+  wall.receiveShadow = true;
+  scene.add(wall);
+
+  // 바닥 (gray 색상) — 아래편에 배치, 그림자 받이 겸용
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 30),
-    new THREE.ShadowMaterial({ opacity: 0.35 }),
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.9, metalness: 0.05 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.9;
@@ -221,67 +238,133 @@ export function renderSales3D(root: HTMLElement): () => void {
     }
   }
 
-  // ── 화폐 트레이 (HTML, 드래그/클릭 투입 유지 §5.7·6.2) ──
-  for (const { denom, src } of DENOMS) {
-    const img = h('img', { src, alt: `${denom}원`, draggable: 'false' });
-    const chip = h('div', {
-      class: 'chip',
-      draggable: 'true',
-      role: 'button',
-      tabindex: '0',
-      title: `${denom.toLocaleString()}원 투입`,
-    }, [img]);
-    chip.addEventListener('dragstart', (e) => {
-      e.dataTransfer?.setData('text/denom', String(denom));
-      chip.classList.add('dragging');
-    });
-    chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-    chip.addEventListener('click', () => doInsert(denom));
-    chip.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        doInsert(denom);
-      }
-    });
-    tray.append(chip);
-  }
-  // 캔버스(3D 자판기) 위로 드롭 → 투입
-  canvasWrap.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    canvasWrap.classList.add('drop-over');
-  });
-  canvasWrap.addEventListener('dragleave', () => canvasWrap.classList.remove('drop-over'));
-  canvasWrap.addEventListener('drop', (e) => {
-    e.preventDefault();
-    canvasWrap.classList.remove('drop-over');
-    const denom = Number(e.dataTransfer?.getData('text/denom'));
-    if (denom) doInsert(denom);
+  // ── 화폐 트레이 (3D) — 동전/지폐를 그래픽으로 편입 (spec §8.3.2) ──
+  const moneyTray = new THREE.Mesh(
+    new THREE.BoxGeometry(3.8, 0.14, 1.15),
+    new THREE.MeshStandardMaterial({ color: 0x3a3f47, metalness: 0.6, roughness: 0.5 }),
+  );
+  moneyTray.position.set(-0.8, -1.5, 2.3);
+  moneyTray.receiveShadow = true;
+  scene.add(moneyTray);
+
+  const texLoader = new THREE.TextureLoader();
+  const moneyItems: Money[] = [];
+  const MONEY_X = [-1.7, -0.8, 0.1];
+  DENOMS.forEach((item, i) => {
+    const tex = texLoader.load(item.src);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    let mesh: THREE.Mesh;
+    if (item.type === 'coin') {
+      // 원통: 그룹 0=측면, 1=윗면, 2=아랫면 → 윗/아랫면에 동전 텍스처 커버
+      const face = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.5, roughness: 0.4 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xc9ccce, metalness: 0.85, roughness: 0.35 });
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.08, 48), [edge, face, face]);
+    } else {
+      // 얇은 직사각 큐브: 그룹 2=+Y(윗면)·3=-Y(아랫면)에 지폐 텍스처, 나머지는 얇은 테두리
+      const face = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.1, roughness: 0.7 });
+      const edge = new THREE.MeshStandardMaterial({ color: 0xe8e4d0, roughness: 0.9 });
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 0.5), [edge, edge, face, face, edge, edge]);
+    }
+    const home = new THREE.Vector3(MONEY_X[i], -1.36, 2.3);
+    mesh.position.copy(home);
+    mesh.castShadow = true;
+    scene.add(mesh);
+    moneyItems.push({ mesh, denom: item.denom, home, baseRot: mesh.rotation.clone() });
   });
 
-  async function doInsert(denom: number) {
-    const r = await api.insertMoney(denom);
-    if (!r.ok && r.error) toast(errorMessage(String(r.error)), 'danger');
-    else spawnCoin();
+  async function insertMoney(item: Money) {
+    const r = await api.insertMoney(item.denom);
+    if (!r.ok && r.error) {
+      toast(errorMessage(String(r.error)), 'danger');
+      returnHome(item);
+      return;
+    }
+    animateInsert(item);
+  }
+  function animateInsert(item: Money) {
+    const start = item.mesh.position.clone();
+    addTween(
+      0.45,
+      (p) => {
+        item.mesh.position.lerpVectors(start, SLOT_WORLD, p);
+        item.mesh.scale.setScalar(1 - p * 0.8);
+        item.mesh.rotation.y += 0.35;
+      },
+      () => {
+        item.mesh.position.copy(item.home);
+        item.mesh.scale.setScalar(1);
+        item.mesh.rotation.copy(item.baseRot);
+      },
+    );
+  }
+  function returnHome(item: Money) {
+    const start = item.mesh.position.clone();
+    addTween(0.3, (p) => item.mesh.position.lerpVectors(start, item.home, p), () => item.mesh.position.copy(item.home));
   }
   async function doPurchase(id: string) {
     const r = await api.purchase(id);
     if (!r.ok && r.error) toast(errorMessage(String(r.error)), 'warning');
   }
 
-  // ── 레이캐스트 클릭 (상품/반환) ──
+  // ── 포인터: 화폐 드래그/클릭 투입 + 상품/반환 클릭 ──
   const raycaster = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
+  const dragPlane = new THREE.Plane();
+  const planeHit = new THREE.Vector3();
+  const dragOffset = new THREE.Vector3();
+  const camDir = new THREE.Vector3();
   let downX = 0;
   let downY = 0;
-  renderer.domElement.addEventListener('pointerdown', (e) => {
-    downX = e.clientX;
-    downY = e.clientY;
-  });
-  renderer.domElement.addEventListener('pointerup', (e) => {
-    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return; // 드래그(회전)면 무시
+  let dragItem: Money | null = null;
+
+  function setNdc(e: PointerEvent) {
     const rect = renderer.domElement.getBoundingClientRect();
     ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  // capture 단계: OrbitControls보다 먼저 실행 → 화폐를 잡으면 카메라 회전 차단
+  renderer.domElement.addEventListener('pointerdown', (e) => {
+    downX = e.clientX;
+    downY = e.clientY;
+    setNdc(e);
+    raycaster.setFromCamera(ndc, camera);
+    const hit = raycaster.intersectObjects(moneyItems.map((m) => m.mesh), false)[0];
+    if (!hit) return;
+    dragItem = moneyItems.find((m) => m.mesh === hit.object) ?? null;
+    if (!dragItem) return;
+    controls.enabled = false;
+    camera.getWorldDirection(camDir);
+    dragPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), dragItem.mesh.position);
+    if (raycaster.ray.intersectPlane(dragPlane, planeHit)) dragOffset.copy(dragItem.mesh.position).sub(planeHit);
+  }, true);
+
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    if (!dragItem) return;
+    setNdc(e);
+    raycaster.setFromCamera(ndc, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, planeHit)) dragItem.mesh.position.copy(planeHit).add(dragOffset);
+  });
+
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    // 화폐 드롭 처리: 짧은 클릭 또는 "자판기 위 어디든" 놓으면 투입 (허용 범위 확대).
+    // 놓은 지점의 레이가 자판기 본체/유리/패널/투입구/상품 중 무엇이든 맞으면 투입.
+    if (dragItem) {
+      const item = dragItem;
+      dragItem = null;
+      controls.enabled = true;
+      const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+      setNdc(e);
+      raycaster.setFromCamera(ndc, camera);
+      const zone = [cabinet, panel, glass, led, slot, ...slots.filter((s) => s.mesh.visible).map((s) => s.mesh)];
+      const overMachine = raycaster.intersectObjects(zone, false).length > 0;
+      if (moved < 6 || overMachine) void insertMoney(item);
+      else returnHome(item);
+      return;
+    }
+    // 상품/반환 클릭
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
+    setNdc(e);
     raycaster.setFromCamera(ndc, camera);
     const targets = [refundBtn, ...slots.filter((s) => s.id && s.mesh.visible).map((s) => s.mesh)];
     const hit = raycaster.intersectObjects(targets, false)[0];
@@ -291,7 +374,15 @@ export function renderSales3D(root: HTMLElement): () => void {
       return;
     }
     const slotHit = slots.find((s) => s.mesh === hit.object);
-    if (slotHit?.id && slotHit.mesh.userData.buyable) void doPurchase(slotHit.id);
+    if (!slotHit?.id) return;
+    if (slotHit.mesh.userData.buyable) {
+      void doPurchase(slotHit.id);
+    } else {
+      // 구매 불가(금액 부족/품절): 상품 그래픽을 깜빡이며 흔든다 (BR-A2·BR-A3, REQ-A10·A13)
+      rejectAnimate(slotHit);
+      const ps = slotHit.mesh.userData.purchasability;
+      toast(ps === 'SOLD_OUT' ? '품절된 상품입니다' : '금액이 부족합니다', 'warning');
+    }
   });
 
   async function doRefund() {
@@ -304,25 +395,33 @@ export function renderSales3D(root: HTMLElement): () => void {
   function addTween(dur: number, update: (p: number) => void, done?: () => void) {
     tweens.push({ t: 0, dur, update, done });
   }
-  function spawnCoin() {
-    const coin = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.14, 0.14, 0.03, 24),
-      new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.3 }),
-    );
-    coin.rotation.z = Math.PI / 2;
-    const from = new THREE.Vector3(1.12, 2.6, 1.4);
-    const to = new THREE.Vector3(1.12, 0.98, 0.9);
-    coin.position.copy(from);
-    machine.add(coin);
+  // 구매 거부 피드백 (REQ-A10·A13): 상품 큐브를 붉게 깜빡이며(shake) 흔든다.
+  function rejectAnimate(slot: Slot) {
+    if (slot.mesh.userData.rejecting) return; // 중복 방지
+    slot.mesh.userData.rejecting = true;
+    const base = slot.mesh.position.clone();
+    const mat = slot.mat;
+    const origEmissive = mat.emissive.getHex();
+    const origIntensity = mat.emissiveIntensity;
     addTween(
       0.5,
       (p) => {
-        coin.position.lerpVectors(from, to, p);
-        coin.rotation.y += 0.4;
+        // 감쇠 좌우 흔들림
+        slot.mesh.position.x = base.x + Math.sin(p * Math.PI * 10) * 0.09 * (1 - p);
+        // danger 붉은색 점멸
+        const on = Math.sin(p * Math.PI * 6) > 0;
+        mat.emissive.setHex(on ? 0xeb5757 : 0x000000);
+        mat.emissiveIntensity = on ? 1.0 : 0;
       },
-      () => machine.remove(coin),
+      () => {
+        slot.mesh.position.copy(base);
+        mat.emissive.setHex(origEmissive);
+        mat.emissiveIntensity = origIntensity;
+        slot.mesh.userData.rejecting = false;
+      },
     );
   }
+
   function dropProduct(color: string, fromPos: THREE.Vector3) {
     const cube = new THREE.Mesh(
       new THREE.BoxGeometry(CUBE, CUBE * 1.35, CUBE * 0.6),
@@ -403,6 +502,7 @@ export function renderSales3D(root: HTMLElement): () => void {
       slot.el.style.display = '';
       const buyable = p.purchasability === 'AVAILABLE';
       slot.mesh.userData.buyable = buyable;
+      slot.mesh.userData.purchasability = p.purchasability;
       // 색/상태
       if (p.purchasability === 'SOLD_OUT') {
         slot.mat.color.set(0x555555);

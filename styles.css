@@ -48,9 +48,7 @@ body {
   width: 100%;
   max-width: 500px; /* REQ-A18: 최대 500px */
   height: 100vh; /* REQ-A18: 100vh */
-  background-image: url('/resources/wall.jpg');
-  background-size: 100% 100%;
-  background-repeat: no-repeat;
+  background: #0c0d10; /* 벽/바닥은 3D 씬에서 렌더 (wall.jpg 제거) */
   position: relative;
   overflow: hidden;
   display: flex;
